@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Учёт закрытых заявок | Автосервис</title>
+    <!-- Bootstrap 5 + Icons + Fonts -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- SheetJS (XLSX) для экспорта Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            background: #f4f7fc;
+            font-family: 'Segoe UI', Roboto, system-ui;
+        }
+        .app-header {
+            background: linear-gradient(135deg, #0b3b5f, #1a5f8b);
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .card-custom {
+            border-radius: 20px;
+            border: none;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+            transition: 0.2s;
+        }
+        .nav-pills .nav-link {
+            border-radius: 30px;
+            font-weight: 500;
+            padding: 0.5rem 1.5rem;
+            color: #1a5f8b;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #1a5f8b;
+            color: white;
+            box-shadow: 0 2px 8px rgba(26,95,139,0.3);
+        }
+        .table-responsive-custom {
+            border-radius: 16px;
+            overflow-x: auto;
+        }
+        .btn-icon {
+            border-radius: 30px;
+            padding: 0.4rem 1rem;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #1e4663;
+        }
+        .required:after {
+            content: "*";
+            color: #dc3545;
+            margin-left: 4px;
+        }
+        .filter-bar {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 20px;
+            margin-bottom: 1.5rem;
+        }
+        .period-block {
+            background: #fff;
+            border-radius: 20px;
+            padding: 0.8rem 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+            border: 1px solid #e0e7ed;
+        }
+        .period-vertical {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 1rem;
+        }
+        .period-vertical .form-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .period-vertical .form-group label {
+            width: auto;
+            margin-bottom: 0;
+        }
+        .settings-gear {
+            cursor: pointer;
+            font-size: 1.8rem;
+            transition: transform 0.2s;
+        }
+        .settings-gear:hover {
+            transform: rotate(30deg);
+        }
+        @media (max-width: 768px) {
+            .nav-pills .nav-link { padding: 0.4rem 1rem; font-size: 0.9rem; }
+            .period-vertical { flex-direction: column; align-items: stretch; }
+            .period-vertical .form-group { justify-content: space-between; }
+        }
+        .total-row {
+            background-color: #e9ecef;
+            font-weight: 600;
+            border-top: 2px solid #1a5f8b;
+        }
+        .settings-group {
+            background: #f8f9fa;
+            border-radius: 16px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .pagination-container {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-header">
+    <div class="container d-flex justify-content-between align-items-center">
+        <h3 class="mb-0"><i class="bi bi-check2-circle me-2"></i>Мастер-заявки</h3>
+        <i class="bi bi-gear-fill settings-gear" id="settingsGearBtn" style="font-size: 1.8rem; cursor: pointer;"></i>
+    </div>
+</div>
+
+<div class="container my-4">
+    <!-- Навигационные вкладки: Новая заявка и Закрытые заявки -->
+    <ul class="nav nav-pills mb-4 justify-content-center flex-wrap" id="mainTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#newRequestTab" type="button" role="tab">📝 Новая заявка</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#closedTab" type="button" role="tab">📋 Закрытые заявки</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- ========================= ВКЛАДКА НОВАЯ ЗАЯВКА ========================= -->
+        <div class="tab-pane fade show active" id="newRequestTab" role="tabpanel">
+            <div class="card card-custom p-4">
+                <h4 class="mb-3"><i class="bi bi-pencil-square"></i> Заполнение решённой заявки</h4>
+                <form id="requestForm">
+                    <input type="hidden" id="editId" value="">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <label class="form-label required">Дата закрытия</label>
+                            <input type="date" id="closeDate" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required">Госномер ТС</label>
+                            <input type="text" id="carNumber" class="form-control" placeholder="А123ВС 777" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required">Клиент</label>
+                            <select id="clientSelect" class="form-select" required></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required">Кол-во заделанных ТС</label>
+                            <input type="number" id="vehicleCount" class="form-control" min="1" value="1" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label required">Описание работ</label>
+                            <textarea id="workDesc" rows="2" class="form-control" placeholder="Диагностика, замена деталей..." required></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required">Оплата за работу (база, руб)</label>
+                            <input type="number" id="baseWorkCost" class="form-control" step="1" min="0" value="0" required>
+                            <small class="text-muted">Без учёта выезда (доплата добавится автоматически)</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required">Оборудование</label>
+                            <select id="equipmentSelect" class="form-select" required></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required">Исполнитель</label>
+                            <select id="performerSelect" class="form-select" required></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label required">Тип оплаты</label>
+                            <select id="paymentType" class="form-select" required>
+                                <option value="Безнал">Безналичный расчёт</option>
+                                <option value="Наличные">Наличные</option>
+                            </select>
+                            <div id="cashAmountBlock" style="display: none;" class="mt-2">
+                                <label class="form-label">Сумма наличными (руб) *</label>
+                                <input type="number" id="cashSum" class="form-control" step="1" min="0" placeholder="Сумма">
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Выезд (доп. услуга)</label>
+                            <div class="d-flex flex-wrap gap-3 align-items-center">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="northSideCheck">
+                                    <label class="form-check-label" id="northSideLabel">Северная сторона (+500₽)</label>
+                                </div>
+                                <div class="flex-grow-1" style="max-width: 250px;">
+                                    <input type="number" id="kmInput" class="form-control" placeholder="Километраж (км)" step="1" min="0">
+                                    <small class="text-muted" id="kmRateLabel">280₽/км</small>
+                                </div>
+                            </div>
+                            <div id="tripInfo" class="mt-2 text-info small"></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 d-flex justify-content-end gap-2">
+                        <button type="button" id="saveRequestBtn" class="btn btn-success btn-lg px-5"><i class="bi bi-save"></i> Сохранить заявку</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ========================= ВКЛАДКА ЗАКРЫТЫЕ ЗАЯВКИ ========================= -->
+        <div class="tab-pane fade" id="closedTab" role="tabpanel">
+            <div class="card card-custom p-4">
+                <h4 class="mb-3"><i class="bi bi-table"></i> Архив закрытых заявок</h4>
+                
+                <!-- Фильтры (добавлен фильтр по исполнителю) -->
+                <div class="filter-bar">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Фильтр по клиенту</label>
+                            <select id="filterClient" class="form-select">
+                                <option value="">Все клиенты</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Фильтр по оборудованию</label>
+                            <select id="filterEquipment" class="form-select">
+                                <option value="">Все оборудование</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Фильтр по исполнителю</label>
+                            <select id="filterPerformer" class="form-select">
+                                <option value="">Все исполнители</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Фильтр по ТС (госномер)</label>
+                            <input type="text" id="filterCarNumber" class="form-control" placeholder="Введите номер">
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12 d-flex justify-content-end gap-2">
+                            <button id="applyFiltersBtn" class="btn btn-primary">Применить фильтры</button>
+                            <button id="resetFiltersBtn" class="btn btn-outline-secondary">Сброс</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Блок периода с кнопками -->
+                <div class="period-block">
+                    <div class="d-flex justify-content-between flex-wrap align-items-center gap-3">
+                        <div class="period-vertical">
+                            <div class="form-group">
+                                <label class="form-label mb-0">Начало периода:</label>
+                                <input type="date" id="periodStart" class="form-control form-control-sm" style="width:160px">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label mb-0">Конец периода:</label>
+                                <input type="date" id="periodEnd" class="form-control form-control-sm" style="width:160px">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button id="applyPeriodBtn" class="btn btn-outline-primary"><i class="bi bi-calendar-check"></i> Применить период</button>
+                            <button id="resetPeriodBtn" class="btn btn-outline-secondary"><i class="bi bi-eraser"></i> Сбросить период</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mb-3">
+                    <div class="d-flex gap-2">
+                        <button id="reportWordBtn" class="btn btn-outline-primary"><i class="bi bi-file-word"></i> Word (период)</button>
+                        <button id="reportExcelBtn" class="btn btn-outline-success"><i class="bi bi-file-excel"></i> Excel (период)</button>
+                    </div>
+                </div>
+                
+                <div class="table-responsive-custom">
+                    <table class="table table-bordered table-hover align-middle" id="closedRequestsTable">
+                        <thead class="table-dark">
+                            <tr><th>#</th><th>Дата</th><th>Госномер</th><th>Клиент</th><th>Кол-во ТС</th><th>Описание</th><th>Оплата работы (₽)</th><th>Оборудование</th><th>Исполнитель</th><th>Тип оплаты</th><th>Выезд</th><th>Действия</th></tr>
+                        </thead>
+                        <tbody id="requestsTableBody"><tr><td colspan="12" class="text-center">Нет заявок</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Пагинация -->
+                <div class="pagination-container" id="paginationContainer"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно настроек (клиенты, оборудование, исполнители, выезд) -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="settingsModalLabel"><i class="bi bi-gear-fill"></i> Настройки</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#clientsTabSettings" type="button" role="tab">Клиенты</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#equipmentTabSettings" type="button" role="tab">Оборудование</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#performersTabSettings" type="button" role="tab">Исполнители</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tripTabSettings" type="button" role="tab">Выезд</button>
+                    </li>
+                </ul>
+                <div class="tab-content mt-3">
+                    <!-- Управление клиентами -->
+                    <div class="tab-pane fade show active" id="clientsTabSettings" role="tabpanel">
+                        <div class="input-group mb-3">
+                            <input type="text" id="newClientNameInput" class="form-control" placeholder="Название нового клиента">
+                            <button class="btn btn-primary" id="addClientSettingsBtn">Добавить</button>
+                        </div>
+                        <ul class="list-group" id="clientsSettingsList"></ul>
+                        <small class="text-muted">* При удалении клиента, если есть заявки с ним, удаление запрещено.</small>
+                    </div>
+                    <!-- Управление оборудованием -->
+                    <div class="tab-pane fade" id="equipmentTabSettings" role="tabpanel">
+                        <div class="input-group mb-3">
+                            <input type="text" id="newEquipmentNameInput" class="form-control" placeholder="Название нового оборудования">
+                            <button class="btn btn-primary" id="addEquipmentSettingsBtn">Добавить</button>
+                        </div>
+                        <ul class="list-group" id="equipmentSettingsList"></ul>
+                        <small class="text-muted">* При удалении оборудования, если оно используется в заявках, удаление запрещено.</small>
+                    </div>
+                    <!-- Управление исполнителями -->
+                    <div class="tab-pane fade" id="performersTabSettings" role="tabpanel">
+                        <div class="input-group mb-3">
+                            <input type="text" id="newPerformerNameInput" class="form-control" placeholder="ФИО исполнителя">
+                            <button class="btn btn-primary" id="addPerformerSettingsBtn">Добавить</button>
+                        </div>
+                        <ul class="list-group" id="performersSettingsList"></ul>
+                        <small class="text-muted">* При удалении исполнителя, если есть заявки с ним, удаление запрещено.</small>
+                    </div>
+                    <!-- Вкладка Выезд (настройки стоимости) -->
+                    <div class="tab-pane fade" id="tripTabSettings" role="tabpanel">
+                        <div class="settings-group">
+                            <label class="form-label">Стоимость выезда на Северную сторону (₽)</label>
+                            <input type="number" id="northCostSetting" class="form-control" step="10" min="0" value="500">
+                            <small class="text-muted">Текущая доплата при выборе "Северная сторона"</small>
+                        </div>
+                        <div class="settings-group mt-3">
+                            <label class="form-label">Стоимость за 1 км пробега (₽/км)</label>
+                            <input type="number" id="kmCostSetting" class="form-control" step="10" min="0" value="280">
+                            <small class="text-muted">Умножается на введённый километраж</small>
+                        </div>
+                        <div class="mt-3 d-flex justify-content-end">
+                            <button id="saveTripSettingsBtn" class="btn btn-primary">Сохранить настройки выезда</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // ---------- ГЛОБАЛЬНЫЕ ДАННЫЕ ----------
+    let requests = [];
+    let clients = [];
+    let equipmentList = [];
+    let performers = [];
+    
+    // Настройки выезда
+    let tripSettings = {
+        northSurcharge: 500,
+        kmRate: 280
+    };
+    
+    let editingId = null;
+    let currentFilters = { client: "", equipment: "", performer: "", carNumber: "" };
+    let dateFrom = "";
+    let dateTo = "";
+    
+    // Пагинация
+    const itemsPerPage = 25;
+    let currentPage = 1;
+    let totalPages = 1;
+    
+    // Загрузка из localStorage
+    function loadData() {
+        const storedRequests = localStorage.getItem("closedRequests");
+        requests = storedRequests ? JSON.parse(storedRequests) : [];
+        
+        const storedClients = localStorage.getItem("appClients");
+        if (storedClients) {
+            clients = JSON.parse(storedClients);
+        } else {
+            clients = ["Севтранстрест", "Евротранс", "Зенит", "Сев-Сервис", "Автодор", "Севдорстрой"];
+            saveClients();
+        }
+        
+        const storedEquipment = localStorage.getItem("appEquipment");
+        if (storedEquipment) {
+            equipmentList = JSON.parse(storedEquipment);
+        } else {
+            equipmentList = ["Трекер ГЛОНАСС", "Видеорегистратор Сова", "АО ГЛОНАСС", "ДУТ", "BLE метка", "Датчик температуры"];
+            saveEquipment();
+        }
+        
+        const storedPerformers = localStorage.getItem("appPerformers");
+        if (storedPerformers) {
+            performers = JSON.parse(storedPerformers);
+        } else {
+            performers = ["Олин Е.А.", "Сидоров П.П.", "Иванов И.И."];
+            savePerformers();
+        }
+        
+        const storedTripSettings = localStorage.getItem("tripSettings");
+        if (storedTripSettings) {
+            tripSettings = JSON.parse(storedTripSettings);
+        } else {
+            tripSettings = { northSurcharge: 500, kmRate: 280 };
+            saveTripSettings();
+        }
+        
+        renderAllSelects();
+        renderRequestsTable();
+        renderSettingsLists();
+        updateTripUIFromSettings();
+    }
+    
+    function saveRequests() { localStorage.setItem("closedRequests", JSON.stringify(requests)); }
+    function saveClients() { localStorage.setItem("appClients", JSON.stringify(clients)); }
+    function saveEquipment() { localStorage.setItem("appEquipment", JSON.stringify(equipmentList)); }
+    function savePerformers() { localStorage.setItem("appPerformers", JSON.stringify(performers)); }
+    function saveTripSettings() { localStorage.setItem("tripSettings", JSON.stringify(tripSettings)); }
+    
+    function updateTripUIFromSettings() {
+        const northLabel = document.getElementById("northSideLabel");
+        if (northLabel) northLabel.innerHTML = `Северная сторона (+${tripSettings.northSurcharge}₽)`;
+        const kmRateLabel = document.getElementById("kmRateLabel");
+        if (kmRateLabel) kmRateLabel.innerHTML = `${tripSettings.kmRate}₽/км`;
+        updateTripInfoPreview();
+    }
+    
+    function renderAllSelects() {
+        const clientSelect = document.getElementById("clientSelect");
+        if (clientSelect) {
+            clientSelect.innerHTML = "";
+            clients.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c;
+                opt.textContent = c;
+                clientSelect.appendChild(opt);
+            });
+        }
+        const equipSelect = document.getElementById("equipmentSelect");
+        if (equipSelect) {
+            equipSelect.innerHTML = "";
+            equipmentList.forEach(e => {
+                const opt = document.createElement("option");
+                opt.value = e;
+                opt.textContent = e;
+                equipSelect.appendChild(opt);
+            });
+        }
+        const perfSelect = document.getElementById("performerSelect");
+        if (perfSelect) {
+            perfSelect.innerHTML = "";
+            performers.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p;
+                opt.textContent = p;
+                perfSelect.appendChild(opt);
+            });
+            if (performers.length) perfSelect.value = performers[0];
+        }
+        // Фильтры
+        const filterClient = document.getElementById("filterClient");
+        if (filterClient) {
+            filterClient.innerHTML = '<option value="">Все клиенты</option>';
+            clients.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c;
+                opt.textContent = c;
+                filterClient.appendChild(opt);
+            });
+        }
+        const filterEquipment = document.getElementById("filterEquipment");
+        if (filterEquipment) {
+            filterEquipment.innerHTML = '<option value="">Все оборудование</option>';
+            equipmentList.forEach(e => {
+                const opt = document.createElement("option");
+                opt.value = e;
+                opt.textContent = e;
+                filterEquipment.appendChild(opt);
+            });
+        }
+        const filterPerformer = document.getElementById("filterPerformer");
+        if (filterPerformer) {
+            filterPerformer.innerHTML = '<option value="">Все исполнители</option>';
+            performers.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p;
+                opt.textContent = p;
+                filterPerformer.appendChild(opt);
+            });
+        }
+    }
+    
+    function renderSettingsLists() {
+        // Клиенты
+        const clientsContainer = document.getElementById("clientsSettingsList");
+        if (clientsContainer) {
+            clientsContainer.innerHTML = "";
+            clients.forEach((client, idx) => {
+                const li = document.createElement("li");
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                li.innerHTML = `
+                    <span>${escapeHtml(client)}</span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-1 edit-client-settings" data-index="${idx}"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger delete-client-settings" data-index="${idx}"><i class="bi bi-trash"></i></button>
+                    </div>
+                `;
+                clientsContainer.appendChild(li);
+            });
+            attachClientEvents();
+        }
+        // Оборудование
+        const equipContainer = document.getElementById("equipmentSettingsList");
+        if (equipContainer) {
+            equipContainer.innerHTML = "";
+            equipmentList.forEach((eq, idx) => {
+                const li = document.createElement("li");
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                li.innerHTML = `
+                    <span>${escapeHtml(eq)}</span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-1 edit-equipment-settings" data-index="${idx}"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger delete-equipment-settings" data-index="${idx}"><i class="bi bi-trash"></i></button>
+                    </div>
+                `;
+                equipContainer.appendChild(li);
+            });
+            attachEquipmentEvents();
+        }
+        // Исполнители
+        const perfContainer = document.getElementById("performersSettingsList");
+        if (perfContainer) {
+            perfContainer.innerHTML = "";
+            performers.forEach((perf, idx) => {
+                const li = document.createElement("li");
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                li.innerHTML = `
+                    <span>${escapeHtml(perf)}</span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-1 edit-performer-settings" data-index="${idx}"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger delete-performer-settings" data-index="${idx}"><i class="bi bi-trash"></i></button>
+                    </div>
+                `;
+                perfContainer.appendChild(li);
+            });
+            attachPerformerEvents();
+        }
+        // Настройки выезда
+        const northCostInput = document.getElementById("northCostSetting");
+        if (northCostInput) northCostInput.value = tripSettings.northSurcharge;
+        const kmCostInput = document.getElementById("kmCostSetting");
+        if (kmCostInput) kmCostInput.value = tripSettings.kmRate;
+    }
+    
+    function attachClientEvents() {
+        document.querySelectorAll('.edit-client-settings').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const newName = prompt("Введите новое название клиента:", clients[idx]);
+                if (newName && newName.trim() !== "" && !clients.includes(newName.trim())) {
+                    const oldName = clients[idx];
+                    clients[idx] = newName.trim();
+                    requests = requests.map(req => {
+                        if (req.client === oldName) req.client = newName.trim();
+                        return req;
+                    });
+                    saveClients();
+                    saveRequests();
+                    renderAllSelects();
+                    renderSettingsLists();
+                    renderRequestsTable();
+                } else if (newName && clients.includes(newName.trim())) {
+                    alert("Клиент с таким именем уже существует");
+                }
+            });
+        });
+        document.querySelectorAll('.delete-client-settings').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const clientToDel = clients[idx];
+                const used = requests.some(r => r.client === clientToDel);
+                if (used) {
+                    alert(`Невозможно удалить клиента "${clientToDel}", так как есть заявки с этим клиентом.`);
+                    return;
+                }
+                if (confirm(`Удалить клиента "${clientToDel}"?`)) {
+                    clients.splice(idx, 1);
+                    saveClients();
+                    renderAllSelects();
+                    renderSettingsLists();
+                    renderRequestsTable();
+                }
+            });
+        });
+    }
+    
+    function attachEquipmentEvents() {
+        document.querySelectorAll('.edit-equipment-settings').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const newName = prompt("Введите новое название оборудования:", equipmentList[idx]);
+                if (newName && newName.trim() !== "" && !equipmentList.includes(newName.trim())) {
+                    const oldName = equipmentList[idx];
+                    equipmentList[idx] = newName.trim();
+                    requests = requests.map(req => {
+                        if (req.equipment === oldName) req.equipment = newName.trim();
+                        return req;
+                    });
+                    saveEquipment();
+                    saveRequests();
+                    renderAllSelects();
+                    renderSettingsLists();
+                    renderRequestsTable();
+                } else if (newName && equipmentList.includes(newName.trim())) {
+                    alert("Оборудование с таким названием уже существует");
+                }
+            });
+        });
+        document.querySelectorAll('.delete-equipment-settings').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const eqToDel = equipmentList[idx];
+                const used = requests.some(r => r.equipment === eqToDel);
+                if (used) {
+                    alert(`Невозможно удалить оборудование "${eqToDel}", так как есть заявки с ним.`);
+                    return;
+                }
+                if (confirm(`Удалить оборудование "${eqToDel}"?`)) {
+                    equipmentList.splice(idx, 1);
+                    saveEquipment();
+                    renderAllSelects();
+                    renderSettingsLists();
+                    renderRequestsTable();
+                }
+            });
+        });
+    }
+    
+    function attachPerformerEvents() {
+        document.querySelectorAll('.edit-performer-settings').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const newName = prompt("Введите новое ФИО исполнителя:", performers[idx]);
+                if (newName && newName.trim() !== "" && !performers.includes(newName.trim())) {
+                    const oldName = performers[idx];
+                    performers[idx] = newName.trim();
+                    requests = requests.map(req => {
+                        if (req.performer === oldName) req.performer = newName.trim();
+                        return req;
+                    });
+                    savePerformers();
+                    saveRequests();
+                    renderAllSelects();
+                    renderSettingsLists();
+                    renderRequestsTable();
+                } else if (newName && performers.includes(newName.trim())) {
+                    alert("Исполнитель с таким именем уже существует");
+                }
+            });
+        });
+        document.querySelectorAll('.delete-performer-settings').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const perfToDel = performers[idx];
+                const used = requests.some(r => r.performer === perfToDel);
+                if (used) {
+                    alert(`Невозможно удалить исполнителя "${perfToDel}", так как есть заявки с ним.`);
+                    return;
+                }
+                if (confirm(`Удалить исполнителя "${perfToDel}"?`)) {
+                    performers.splice(idx, 1);
+                    savePerformers();
+                    renderAllSelects();
+                    renderSettingsLists();
+                    renderRequestsTable();
+                }
+            });
+        });
+    }
+    
+    function escapeHtml(str) { 
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m){
+            if(m==='&') return '&amp;';
+            if(m==='<') return '&lt;';
+            if(m==='>') return '&gt;';
+            return m;
+        });
+    }
+    
+    // Фильтрация заявок (без пагинации, полный список)
+    function getFilteredRequests() {
+        let filtered = [...requests];
+        if (currentFilters.client) filtered = filtered.filter(r => r.client === currentFilters.client);
+        if (currentFilters.equipment) filtered = filtered.filter(r => r.equipment === currentFilters.equipment);
+        if (currentFilters.performer) filtered = filtered.filter(r => r.performer === currentFilters.performer);
+        if (currentFilters.carNumber) {
+            const term = currentFilters.carNumber.toLowerCase();
+            filtered = filtered.filter(r => r.carNumber.toLowerCase().includes(term));
+        }
+        if (dateFrom) filtered = filtered.filter(r => r.closeDate >= dateFrom);
+        if (dateTo) filtered = filtered.filter(r => r.closeDate <= dateTo);
+        filtered.sort((a,b) => (b.closeDate || "").localeCompare(a.closeDate || ""));
+        return filtered;
+    }
+    
+    // Рендер таблицы с учётом текущей страницы
+    function renderRequestsTable() {
+        const filtered = getFilteredRequests();
+        const totalItems = filtered.length;
+        totalPages = Math.ceil(totalItems / itemsPerPage);
+        if (totalPages === 0) totalPages = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+        const pageItems = filtered.slice(startIndex, endIndex);
+        
+        const tbody = document.getElementById("requestsTableBody");
+        if (totalItems === 0) {
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center">Нет заявок, соответствующих фильтрам</td></tr>`;
+            document.getElementById("paginationContainer").innerHTML = "";
+            return;
+        }
+        
+        let html = "";
+        pageItems.forEach((req, idx) => {
+            const globalNumber = startIndex + idx + 1;
+            html += `<tr>
+                <td>${globalNumber}</td>
+                <td>${req.closeDate}</td>
+                <td>${escapeHtml(req.carNumber)}</td>
+                <td>${escapeHtml(req.client)}</td>
+                <td>${req.vehicleCount}</td>
+                <td>${req.workDesc.length > 40 ? req.workDesc.slice(0,37)+"..." : escapeHtml(req.workDesc)}</td>
+                <td>${req.finalWorkCost}</td>
+                <td>${escapeHtml(req.equipment)}</td>
+                <td>${escapeHtml(req.performer || '—')}</td>
+                <td>${req.paymentType}${req.cashAmount ? ` (нал:${req.cashAmount}₽)` : ""}</td>
+                <td>${req.tripDetail || "—"}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning me-1 editReqBtn" data-id="${req.id}"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger me-1 deleteReqBtn" data-id="${req.id}"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-info actReqBtn" data-id="${req.id}"><i class="bi bi-file-text"></i> Акт</button>
+                </td>
+            </tr>`;
+        });
+        
+        // Итоговая строка (по всем отфильтрованным)
+        let totalVehicles = 0, totalWorkSum = 0, totalCashSum = 0;
+        filtered.forEach(r => {
+            totalVehicles += r.vehicleCount || 0;
+            totalWorkSum += r.finalWorkCost || 0;
+            if (r.paymentType === "Наличные" && r.cashAmount) totalCashSum += r.cashAmount;
+        });
+        
+        html += `<tr class="total-row">
+            <td colspan="4" style="text-align: right; font-weight: bold;">ИТОГО:</td>
+            <td style="font-weight: bold;">${totalVehicles}</td>
+            <td></td>
+            <td style="font-weight: bold;">${totalWorkSum.toLocaleString()} ₽</td>
+            <td></td>
+            <td></td>
+            <td style="font-weight: bold;">Наличными: ${totalCashSum.toLocaleString()} ₽</td>
+            <td></td>
+            <td></td>
+        </tr>`;
+        
+        tbody.innerHTML = html;
+        
+        // Обработчики для кнопок на текущей странице
+        document.querySelectorAll('.editReqBtn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = parseInt(btn.getAttribute('data-id'));
+                editRequestById(id);
+            });
+        });
+        document.querySelectorAll('.deleteReqBtn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = parseInt(btn.getAttribute('data-id'));
+                if (confirm("Удалить заявку?")) {
+                    requests = requests.filter(r => r.id !== id);
+                    saveRequests();
+                    renderRequestsTable();
+                }
+            });
+        });
+        document.querySelectorAll('.actReqBtn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = parseInt(btn.getAttribute('data-id'));
+                const req = requests.find(r => r.id === id);
+                if (req) generateActWord(req);
+            });
+        });
+        
+        renderPagination(totalPages);
+    }
+    
+    function renderPagination(totalPages) {
+        const container = document.getElementById("paginationContainer");
+        if (totalPages <= 1) {
+            container.innerHTML = "";
+            return;
+        }
+        let paginationHtml = `<nav><ul class="pagination justify-content-center">`;
+        paginationHtml += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><button class="page-link" data-page="prev">« Предыдущая</button></li>`;
+        for (let i = 1; i <= totalPages; i++) {
+            paginationHtml += `<li class="page-item ${currentPage === i ? 'active' : ''}"><button class="page-link" data-page="${i}">${i}</button></li>`;
+        }
+        paginationHtml += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><button class="page-link" data-page="next">Следующая »</button></li>`;
+        paginationHtml += `</ul></nav>`;
+        container.innerHTML = paginationHtml;
+        
+        // Обработчики для кнопок пагинации
+        container.querySelectorAll('.page-link').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const page = btn.getAttribute('data-page');
+                if (page === 'prev') {
+                    if (currentPage > 1) currentPage--;
+                } else if (page === 'next') {
+                    if (currentPage < totalPages) currentPage++;
+                } else {
+                    currentPage = parseInt(page);
+                }
+                renderRequestsTable();
+            });
+        });
+    }
+    
+    // Расчёт доплаты
+    function calculateTripSurcharge(kmValue, northChecked) {
+        let surcharge = 0, detail = "";
+        if (northChecked) { 
+            surcharge = tripSettings.northSurcharge; 
+            detail = `Северная сторона (+${tripSettings.northSurcharge}₽)`; 
+        }
+        else if (kmValue && kmValue > 0) { 
+            surcharge = kmValue * tripSettings.kmRate; 
+            detail = `${kmValue} км (${tripSettings.kmRate}₽/км) = +${surcharge}₽`; 
+        }
+        else { detail = "Нет выезда"; }
+        return { surcharge, detail };
+    }
+    
+    function saveRequestFromForm() {
+        const closeDate = document.getElementById("closeDate").value;
+        const carNumber = document.getElementById("carNumber").value.trim();
+        const client = document.getElementById("clientSelect").value;
+        const vehicleCount = parseInt(document.getElementById("vehicleCount").value);
+        const workDesc = document.getElementById("workDesc").value.trim();
+        let baseWorkCost = parseFloat(document.getElementById("baseWorkCost").value);
+        const equipment = document.getElementById("equipmentSelect").value;
+        const performer = document.getElementById("performerSelect").value;
+        const paymentType = document.getElementById("paymentType").value;
+        let cashAmount = null;
+        const northSide = document.getElementById("northSideCheck").checked;
+        const kmInputVal = document.getElementById("kmInput").value;
+        const kmValue = kmInputVal ? parseInt(kmInputVal) : 0;
+        
+        if (!closeDate) { alert("Выберите дату закрытия"); return; }
+        if (!carNumber) { alert("Введите госномер ТС"); return; }
+        if (!client) { alert("Выберите клиента"); return; }
+        if (isNaN(vehicleCount) || vehicleCount < 1) { alert("Кол-во ТС должно быть не менее 1"); return; }
+        if (!workDesc) { alert("Заполните описание работ"); return; }
+        if (isNaN(baseWorkCost) || baseWorkCost < 0) baseWorkCost = 0;
+        if (!equipment) { alert("Выберите оборудование"); return; }
+        if (!performer) { alert("Выберите исполнителя"); return; }
+        if (paymentType === "Наличные") {
+            const cashField = document.getElementById("cashSum");
+            if (!cashField.value || parseFloat(cashField.value) <= 0) { alert("При оплате наличными укажите сумму в рублях"); return; }
+            cashAmount = parseFloat(cashField.value);
+        }
+        const { surcharge, detail } = calculateTripSurcharge(kmValue, northSide);
+        const finalWorkCost = baseWorkCost + surcharge;
+        const requestObj = {
+            id: editingId ? editingId : Date.now(),
+            closeDate, carNumber, client, vehicleCount, workDesc,
+            baseWorkCost, finalWorkCost, equipment, performer,
+            paymentType, cashAmount: cashAmount || null, tripDetail: detail,
+            kmUsed: kmValue || 0, northUsed: northSide, surcharge
+        };
+        if (editingId) {
+            const index = requests.findIndex(r => r.id === editingId);
+            if (index !== -1) requests[index] = requestObj;
+            editingId = null;
+            document.getElementById("editId").value = "";
+        } else {
+            requests.push(requestObj);
+        }
+        saveRequests();
+        resetForm();
+        renderRequestsTable();
+        document.querySelector('[data-bs-target="#closedTab"]').click();
+        alert("Заявка сохранена!");
+    }
+    
+    function editRequestById(id) {
+        const req = requests.find(r => r.id === id);
+        if (!req) return;
+        editingId = id;
+        document.getElementById("editId").value = id;
+        document.getElementById("closeDate").value = req.closeDate;
+        document.getElementById("carNumber").value = req.carNumber;
+        document.getElementById("clientSelect").value = req.client;
+        document.getElementById("vehicleCount").value = req.vehicleCount;
+        document.getElementById("workDesc").value = req.workDesc;
+        document.getElementById("baseWorkCost").value = req.baseWorkCost;
+        document.getElementById("equipmentSelect").value = req.equipment;
+        document.getElementById("performerSelect").value = req.performer || (performers.length ? performers[0] : "");
+        document.getElementById("paymentType").value = req.paymentType;
+        if (req.paymentType === "Наличные") {
+            document.getElementById("cashAmountBlock").style.display = "block";
+            document.getElementById("cashSum").value = req.cashAmount || "";
+        } else {
+            document.getElementById("cashAmountBlock").style.display = "none";
+            document.getElementById("cashSum").value = "";
+        }
+        document.getElementById("northSideCheck").checked = req.northUsed || false;
+        document.getElementById("kmInput").value = (req.kmUsed && req.kmUsed>0 && !req.northUsed) ? req.kmUsed : "";
+        updateTripInfoPreview();
+        document.querySelector('[data-bs-target="#newRequestTab"]').click();
+    }
+    
+    function updateTripInfoPreview() {
+        const north = document.getElementById("northSideCheck").checked;
+        const km = parseInt(document.getElementById("kmInput").value) || 0;
+        let extra = 0, text = "";
+        if (north) { 
+            extra = tripSettings.northSurcharge; 
+            text = `Северная сторона: +${extra}₽`; 
+        }
+        else if (km > 0) { 
+            extra = km * tripSettings.kmRate; 
+            text = `${km} км → +${extra}₽`; 
+        }
+        else { text = "Выезд не выбран"; }
+        document.getElementById("tripInfo").innerHTML = `<i class="bi bi-truck"></i> Доплата: ${text}`;
+    }
+    
+    function resetForm() {
+        document.getElementById("requestForm").reset();
+        editingId = null;
+        document.getElementById("editId").value = "";
+        document.getElementById("closeDate").value = new Date().toISOString().slice(0,10);
+        document.getElementById("vehicleCount").value = 1;
+        document.getElementById("baseWorkCost").value = 0;
+        document.getElementById("northSideCheck").checked = false;
+        document.getElementById("kmInput").value = "";
+        document.getElementById("paymentType").dispatchEvent(new Event('change'));
+        updateTripInfoPreview();
+        if (equipmentList.length) document.getElementById("equipmentSelect").value = equipmentList[0];
+        if (performers.length) document.getElementById("performerSelect").value = performers[0];
+    }
+    
+    function generateWordReport() {
+        let filtered = getFilteredRequests();
+        if (filtered.length === 0) { alert("Нет заявок за выбранный период."); return; }
+        
+        let totalVehicles = 0, totalWorkSum = 0, totalCashSum = 0;
+        filtered.forEach(r => {
+            totalVehicles += r.vehicleCount || 0;
+            totalWorkSum += r.finalWorkCost || 0;
+            if (r.paymentType === "Наличные" && r.cashAmount) totalCashSum += r.cashAmount;
+        });
+        
+        let html = `<html><head><meta charset="UTF-8"><title>Отчёт</title><style>body{font-family:'Times New Roman'; margin:2cm;} table{border-collapse:collapse;width:100%} th,td{border:1px solid #000;padding:6px}</style></head><body>
+        <h2>Отчёт по закрытым заявкам</h2><p>Период: ${dateFrom || "все"} — ${dateTo || "все"}</p>
+        <table><thead><tr><th>#</th><th>Дата</th><th>Госномер</th><th>Клиент</th><th>Кол-во ТС</th><th>Описание</th><th>Оплата работы</th><th>Оборудование</th><th>Исполнитель</th><th>Тип оплаты</th><th>Выезд</th></tr></thead><tbody>`;
+        filtered.forEach((r,i) => { 
+            html += `<tr>
+                <td>${i+1}</td>
+                <td>${r.closeDate}</td>
+                <td>${r.carNumber}</td>
+                <td>${r.client}</td>
+                <td>${r.vehicleCount}</td>
+                <td>${r.workDesc}</td>
+                <td>${r.finalWorkCost}</td>
+                <td>${r.equipment}</td>
+                <td>${r.performer || '—'}</td>
+                <td>${r.paymentType}${r.cashAmount?` (нал:${r.cashAmount})`:""}</td>
+                <td>${r.tripDetail||"—"}</td>
+            </tr>`;
+        });
+        html += `<tr style="background:#f2f2f2; font-weight:bold;"><td colspan="4">ИТОГО:</td><td>${totalVehicles}</td><td></td><td>${totalWorkSum} ₽</td><td></td><td></td><td>Наличными: ${totalCashSum} ₽</td><td></td></tr>`;
+        html += `</tbody></table></body></html>`;
+        const blob = new Blob([html], { type: "application/msword" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `report_${Date.now()}.doc`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    
+    function generateExcel() {
+        let filtered = getFilteredRequests();
+        if (filtered.length === 0) { alert("Нет заявок за период."); return; }
+        
+        let totalVehicles = 0, totalWorkSum = 0, totalCashSum = 0;
+        filtered.forEach(r => {
+            totalVehicles += r.vehicleCount || 0;
+            totalWorkSum += r.finalWorkCost || 0;
+            if (r.paymentType === "Наличные" && r.cashAmount) totalCashSum += r.cashAmount;
+        });
+        
+        const wsData = [["#","Дата","Госномер","Клиент","Кол-во ТС","Описание","Оплата работы","Оборудование","Исполнитель","Тип оплаты","Выезд"]];
+        filtered.forEach((r,i) => wsData.push([i+1, r.closeDate, r.carNumber, r.client, r.vehicleCount, r.workDesc, r.finalWorkCost, r.equipment, r.performer || '—', r.paymentType+(r.cashAmount?` (нал:${r.cashAmount})`:""), r.tripDetail||"—"]));
+        wsData.push(["ИТОГО:", "", "", "", totalVehicles, "", totalWorkSum, "", "", `Наличными: ${totalCashSum} ₽`, ""]);
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, "Закрытые заявки");
+        XLSX.writeFile(wb, `report_${Date.now()}.xlsx`);
+    }
+    
+    function generateActWord(req) {
+        let html = `<html><head><meta charset="UTF-8"><title>Акт №${req.id}</title><style>body{font-family:'Times New Roman'; margin:2.5cm;} h2{text-align:center;} .signature{margin-top:40px;}</style></head><body>
+        <h2>Акт выполненных работ № ${req.id}</h2>
+        <p><strong>Город:</strong> Севастополь</p>
+        <p><strong>Исполнитель:</strong> ${req.performer || 'Олин Е.А.'}</p>
+        <p><strong>Дата закрытия заявки:</strong> ${req.closeDate}</p>
+        <p><strong>Клиент:</strong> ${req.client}</p>
+        <p><strong>Госномер ТС:</strong> ${req.carNumber}</p>
+        <p><strong>Количество заделанных ТС:</strong> ${req.vehicleCount}</p>
+        <p><strong>Описание работ:</strong> ${req.workDesc}</p>
+        <p><strong>Оборудование:</strong> ${req.equipment}</p>
+        <p><strong>Оплата за работу (с выездом):</strong> ${req.finalWorkCost} руб.</p>
+        <p><strong>Тип оплаты:</strong> ${req.paymentType}${req.cashAmount?` (наличные: ${req.cashAmount} руб.)`:""}</p>
+        <p><strong>Выезд:</strong> ${req.tripDetail || "—"}</p>`;
+        if (req.paymentType === "Безнал") html += `<p><em>Примечание: выставить счёт клиенту.</em></p>`;
+        html += `<div class="signature"><p>Исполнитель: _____________ /${req.performer || 'Олин Е.А.'}/</p><p>Дата: ${new Date().toLocaleDateString()}</p></div></body></html>`;
+        const blob = new Blob([html], { type: "application/msword" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `act_${req.id}.doc`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    
+    function applyFilters() {
+        currentFilters.client = document.getElementById("filterClient").value;
+        currentFilters.equipment = document.getElementById("filterEquipment").value;
+        currentFilters.performer = document.getElementById("filterPerformer").value;
+        currentFilters.carNumber = document.getElementById("filterCarNumber").value.trim();
+        currentPage = 1; // сброс на первую страницу
+        renderRequestsTable();
+    }
+    
+    function resetFilters() {
+        document.getElementById("filterClient").value = "";
+        document.getElementById("filterEquipment").value = "";
+        document.getElementById("filterPerformer").value = "";
+        document.getElementById("filterCarNumber").value = "";
+        currentFilters = { client: "", equipment: "", performer: "", carNumber: "" };
+        currentPage = 1;
+        renderRequestsTable();
+    }
+    
+    function applyPeriod() {
+        dateFrom = document.getElementById("periodStart").value;
+        dateTo = document.getElementById("periodEnd").value;
+        currentPage = 1;
+        renderRequestsTable();
+    }
+    
+    function resetPeriod() {
+        document.getElementById("periodStart").value = "";
+        document.getElementById("periodEnd").value = "";
+        dateFrom = "";
+        dateTo = "";
+        currentPage = 1;
+        renderRequestsTable();
+    }
+    
+    function saveTripSettingsFromModal() {
+        const newNorth = parseInt(document.getElementById("northCostSetting").value);
+        const newKmRate = parseInt(document.getElementById("kmCostSetting").value);
+        if (!isNaN(newNorth) && newNorth >= 0) tripSettings.northSurcharge = newNorth;
+        if (!isNaN(newKmRate) && newKmRate >= 0) tripSettings.kmRate = newKmRate;
+        saveTripSettings();
+        updateTripUIFromSettings();
+        alert("Настройки выезда сохранены!");
+    }
+    
+    function bindEvents() {
+        document.getElementById("saveRequestBtn").addEventListener("click", saveRequestFromForm);
+        document.getElementById("paymentType").addEventListener("change", function() {
+            document.getElementById("cashAmountBlock").style.display = this.value === "Наличные" ? "block" : "none";
+            if (this.value !== "Наличные") document.getElementById("cashSum").value = "";
+        });
+        document.getElementById("northSideCheck").addEventListener("change", updateTripInfoPreview);
+        document.getElementById("kmInput").addEventListener("input", updateTripInfoPreview);
+        document.getElementById("reportWordBtn").addEventListener("click", generateWordReport);
+        document.getElementById("reportExcelBtn").addEventListener("click", generateExcel);
+        document.getElementById("applyFiltersBtn").addEventListener("click", applyFilters);
+        document.getElementById("resetFiltersBtn").addEventListener("click", resetFilters);
+        document.getElementById("applyPeriodBtn").addEventListener("click", applyPeriod);
+        document.getElementById("resetPeriodBtn").addEventListener("click", resetPeriod);
+        document.getElementById("settingsGearBtn").addEventListener("click", () => {
+            renderSettingsLists();
+            const modal = new bootstrap.Modal(document.getElementById("settingsModal"));
+            modal.show();
+        });
+        document.getElementById("addClientSettingsBtn").addEventListener("click", () => {
+            const newName = document.getElementById("newClientNameInput").value.trim();
+            if (newName && !clients.includes(newName)) {
+                clients.push(newName);
+                saveClients();
+                renderAllSelects();
+                renderSettingsLists();
+                renderRequestsTable();
+                document.getElementById("newClientNameInput").value = "";
+            } else alert("Введите уникальное название клиента");
+        });
+        document.getElementById("addEquipmentSettingsBtn").addEventListener("click", () => {
+            const newName = document.getElementById("newEquipmentNameInput").value.trim();
+            if (newName && !equipmentList.includes(newName)) {
+                equipmentList.push(newName);
+                saveEquipment();
+                renderAllSelects();
+                renderSettingsLists();
+                renderRequestsTable();
+                document.getElementById("newEquipmentNameInput").value = "";
+            } else alert("Введите уникальное название оборудования");
+        });
+        document.getElementById("addPerformerSettingsBtn").addEventListener("click", () => {
+            const newName = document.getElementById("newPerformerNameInput").value.trim();
+            if (newName && !performers.includes(newName)) {
+                performers.push(newName);
+                savePerformers();
+                renderAllSelects();
+                renderSettingsLists();
+                renderRequestsTable();
+                document.getElementById("newPerformerNameInput").value = "";
+            } else alert("Введите уникальное ФИО исполнителя");
+        });
+        document.getElementById("saveTripSettingsBtn").addEventListener("click", saveTripSettingsFromModal);
+        document.querySelector('[data-bs-target="#closedTab"]').addEventListener('shown.bs.tab', () => renderRequestsTable());
+    }
+    
+    function init() {
+        loadData();
+        bindEvents();
+        resetForm();
+        document.getElementById("closeDate").value = new Date().toISOString().slice(0,10);
+        updateTripInfoPreview();
+    }
+    init();
+</script>
+</body>
+</html>
